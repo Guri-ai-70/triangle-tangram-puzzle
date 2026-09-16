@@ -16,7 +16,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; background:var(--bg); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--text); }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 48px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 48px; }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
   p.sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; }
   .row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
@@ -26,7 +26,7 @@
   button:active { transform: translateY(1px); }
   button.primary { border-color: var(--accent); color: var(--accent-text); }
   #boardWrap { display:flex; justify-content:center; }
-  #board { width:100%; max-width: 760px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
+  #board { width:100%; max-width: 860px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
   .btnbar { display:flex; gap:8px; flex-wrap:wrap; }
   .footer-row { display:flex; justify-content:space-between; margin-top: 12px; gap:8px; flex-wrap:wrap; }
 </style>
@@ -45,7 +45,7 @@
   </div>
 
   <div id="boardWrap">
-    <svg id="board" viewBox="0 0 500 620" role="img" aria-label="Puzzle board">
+    <svg id="board" viewBox="0 0 520 680" role="img" aria-label="Puzzle board">
       <title>Triangle puzzle board</title>
       <g id="targetLayer"></g>
       <g id="pieceLayer"></g>
@@ -65,9 +65,9 @@ const BONUS_DATA = [[0,0],[30,0],[15,25.980762113533157]];
 const COLORS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD","#639922","#BA7517","#888780"];
 const BONUS_COLOR = "#D4534B";
 
-const SCALE = 2.0;
-const BOARD_OFFSET = {x:120, y:260};
-const BONUS_OFFSET = {x:60, y:60};
+const SCALE = 1.7;
+const BOARD_OFFSET = {x:110, y:40};
+const BONUS_OFFSET = {x:400, y:60};
 
 function polyStr(pts){ return pts.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" "); }
 function centroid(pts){
@@ -255,11 +255,15 @@ document.getElementById("scrambleBtn").addEventListener("click", scramble);
 
 function scramble(){
   drag = null;
-  const trayXs = [60,150,260,350,430, 90,200,310,410];
-  const trayYs = [520,540,510,540,520, 460,470,460,470];
+  // 3x3 tray grid, well below the target triangle (y 40-261) and bonus
+  // target (y 50-94) so nothing spawns overlapping the solution outlines.
+  const cols = [80, 260, 440];
+  const rows = [320, 470, 620];
+  const trayXs = [cols[0],cols[1],cols[2],cols[0],cols[1],cols[2],cols[0],cols[1],cols[2]];
+  const trayYs = [rows[0],rows[0],rows[0],rows[1],rows[1],rows[1],rows[2],rows[2],rows[2]];
   pieces.forEach((pc,i)=>{
-    pc.x = trayXs[i % trayXs.length] + (Math.random()*20-10);
-    pc.y = trayYs[i % trayYs.length] + (Math.random()*20-10);
+    pc.x = trayXs[i] + (Math.random()*16-8);
+    pc.y = trayYs[i] + (Math.random()*16-8);
     pc.rot = [60,120,180,240,300][Math.floor(Math.random()*5)];
     pc.flip = 1;
     pc.solved = false;
