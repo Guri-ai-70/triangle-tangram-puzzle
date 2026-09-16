@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triangle tangram puzzle</title>
+<style>
+  :root {
+    --bg: #F7F6F2; --card: #FFFFFF; --text: #232320; --text-secondary: #5F5E5A;
+    --border: #D3D1C7; --border-strong: #B4B2A9; --accent: #378ADD; --accent-text:#042C53;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17181A; --card:#212226; --text:#EDECE8; --text-secondary:#B4B2A9;
+             --border:#3A3B3E; --border-strong:#54565A; --accent:#85B7EB; --accent-text:#E6F1FB; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:var(--bg); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--text); }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  #status { font-size: 14px; color: var(--text-secondary); }
+  button { padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border-strong);
+           background: var(--card); color: var(--text); font-size: 14px; cursor: pointer; }
+  button:active { transform: translateY(1px); }
+  button.primary { border-color: var(--accent); color: var(--accent-text); }
+  #board { width:100%; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
+  .btnbar { display:flex; gap:8px; flex-wrap:wrap; }
+  .footer-row { display:flex; justify-content:space-between; margin-top: 12px; gap:8px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Triangle tangram puzzle</h1>
+  <p class="sub">Drag a piece to move it. Select it, then rotate or flip. Fit all 9 pieces into the outlines.</p>
+
+  <div class="row">
+    <div id="status">0 of 9 pieces placed.</div>
+    <div class="btnbar">
+      <button id="rotateBtn" aria-label="Rotate selected piece">&#8635; Rotate</button>
+      <button id="flipBtn" aria-label="Flip selected piece">&#8646; Flip</button>
+    </div>
+  </div>
+
+  <svg id="board" viewBox="0 0 500 620" role="img" aria-label="Puzzle board">
+    <title>Triangle puzzle board</title>
+    <g id="targetLayer"></g>
+    <g id="pieceLayer"></g>
+  </svg>
+
+  <div class="footer-row">
+    <button id="solutionBtn">&#128065; Show solution</button>
+    <button id="scrambleBtn" class="primary">&#8635; Scramble</button>
+  </div>
+</div>
+
+<script>
+const PIECE_DATA = [[[90.0,77.94228634059947],[75.0,103.92304845413263],[45.0,103.92304845413263],[60.0,129.90381056766577],[90.0,129.90381056766577],[120.0,129.90381056766577],[105.0,103.92304845413263],[90.0,77.94228634059947]],[[30.0,77.94228634059947],[15.0,103.92304845413263],[0.0,129.90381056766577],[30.0,129.90381056766577],[60.0,129.90381056766577],[45.0,103.92304845413263],[30.0,77.94228634059947]],[[60.0,25.980762113533157],[45.0,51.96152422706631],[30.0,77.94228634059947],[45.0,103.92304845413263],[60.0,77.94228634059947],[75.0,51.96152422706631],[60.0,25.980762113533157]],[[60.0,77.94228634059947],[45.0,103.92304845413263],[75.0,103.92304845413263],[90.0,77.94228634059947],[75.0,51.96152422706631],[60.0,77.94228634059947]],[[75.0,51.96152422706631],[90.0,77.94228634059947],[120.0,77.94228634059947],[105.0,51.96152422706631],[90.0,25.980762113533157],[75.0,51.96152422706631]],[[90.0,77.94228634059947],[105.0,103.92304845413263],[135.0,103.92304845413263],[120.0,77.94228634059947],[90.0,77.94228634059947]],[[105.0,103.92304845413263],[120.0,129.90381056766577],[150.0,129.90381056766577],[135.0,103.92304845413263],[105.0,103.92304845413263]],[[60.0,25.980762113533157],[75.0,51.96152422706631],[90.0,25.980762113533157],[75.0,0.0],[60.0,25.980762113533157]]];
+const BONUS_DATA = [[0,0],[30,0],[15,25.980762113533157]];
+
+const COLORS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD","#639922","#BA7517","#888780"];
+const DARK   = ["#26215C","#04342C","#4A1B0C","#4B1528","#042C53","#173404","#412402","#2C2C2A"];
+const BONUS_COLOR = "#D4534B", BONUS_DARK = "#501313";
+
+const SCALE = 2.0;
+const BOARD_OFFSET = {x:120, y:260};
+const BONUS_OFFSET = {x:60, y:60};
+
+function poly(pts){ return pts.map(p=>p.join(",")).join(" "); }
+function centroid(pts){
+  let a=0,cx=0,cy=0;
+  for(let i=0;i<pts.length-1;i++){
+    const [x0,y0]=pts[i],[x1,y1]=pts[i+1];
+    const cross = x0*y1-x1*y0;
+    a += cross; cx += (x0+x1)*cross; cy += (y0+y1)*cross;
+  }
+  if(Math.abs(a) < 1e-6){
+    const n = pts.length;
+    return [pts.reduce((s,p)=>s+p[0],0)/n, pts.reduce((s,p)=>s+p[1],0)/n];
+  }
+  a*=0.5;
+  return [cx/(6*a), cy/(6*a)];
+}
+
+function buildPiece(id, rawPts, color, dark, isBonus){
+  const scaled = rawPts.map(([x,y])=>[x*SCALE, y*SCALE]);
+  const c = centroid(scaled.concat([scaled[0]]));
+  const local = scaled.map(([x,y])=>[x-c[0], y-c[1]]);
+  const offset = isBonus ? BONUS_OFFSET : BOARD_OFFSET;
+  const targetX = c[0] + offset.x, targetY = c[1] + offset.y;
+  return { id, local, color, dark, isBonus, targetX, targetY, targetRot:0, targetFlip:1,
+           x: targetX, y: targetY, rot: 0, flip: 1, solved:false };
+}
+
+let pieces = PIECE_DATA.map((p,i)=>buildPiece("p"+(i+1), p, COLORS[i], DARK[i], false));
+pieces.push(buildPiece("bonus", BONUS_DATA, BONUS_COLOR, BONUS_DARK, true));
+
+const svgNS = "http://www.w3.org/2000/svg";
+const pieceLayer = document.getElementById("pieceLayer");
+const targetLayer = document.getElementById("targetLayer");
+const statusEl = document.getElementById("status");
+let selectedId = null;
+let solvedCount = 0;
+
+function drawTargets(){
+  pieces.forEach(pc=>{
+    const el = document.createElementNS(svgNS,"polygon");
+    const pts = pc.local.map(([x,y])=>[x+pc.targetX, y+pc.targetY]);
+    el.setAttribute("points", poly(pts));
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke", "var(--border-strong)");
+    el.setAttribute("stroke-width","1.5");
+    el.setAttribute("stroke-dasharray","4,3");
+    targetLayer.appendChild(el);
+  });
+}
+
+function transformStr(pc){
+  return `translate(${pc.x} ${pc.y}) rotate(${pc.rot}) scale(${pc.flip} 1)`;
+}
+
+function drawPieces(){
+  pieceLayer.innerHTML = "";
+  pieces.forEach(pc=>{
+    const g = document.createElementNS(svgNS,"g");
+    g.setAttribute("data-id", pc.id);
+    g.setAttribute("transform", transformStr(pc));
+    g.style.cursor = "grab";
+    const p1 = document.createElementNS(svgNS,"polygon");
+    p1.setAttribute("points", poly(pc.local));
+    p1.setAttribute("fill", pc.color);
+    p1.setAttribute("stroke", pc.id===selectedId ? "#000000" : "#FFFFFF");
+    p1.setAttribute("stroke-width", pc.id===selectedId ? "3" : "1.5");
+    g.appendChild(p1);
+    g.addEventListener("pointerdown", onPointerDown);
+    pieceLayer.appendChild(g);
+    pc.el = g;
+  });
+}
+
+let drag = null;
+function onPointerDown(e){
+  const id = e.currentTarget.getAttribute("data-id");
+  const pc = pieces.find(p=>p.id===id);
+  if(pc.solved) { selectPiece(id); return; }
+  selectPiece(id);
+  const svg = document.getElementById("board");
+  const pt = clientToSvg(e.clientX, e.clientY, svg);
+  drag = { pc, startX: pt.x, startY: pt.y, origX: pc.x, origY: pc.y };
+  e.currentTarget.setPointerCapture(e.pointerId);
+  e.currentTarget.style.cursor = "grabbing";
+  pieceLayer.appendChild(e.currentTarget);
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+}
+function clientToSvg(clientX, clientY, svg){
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const ctm = svg.getScreenCTM().inverse();
+  return pt.matrixTransform(ctm);
+}
+function onPointerMove(e){
+  if(!drag) return;
+  const svg = document.getElementById("board");
+  const pt = clientToSvg(e.clientX, e.clientY, svg);
+  drag.pc.x = drag.origX + (pt.x - drag.startX);
+  drag.pc.y = drag.origY + (pt.y - drag.startY);
+  drag.pc.el.setAttribute("transform", transformStr(drag.pc));
+}
+function onPointerUp(e){
+  if(!drag) return;
+  drag.pc.el.style.cursor = "grab";
+  checkSnap(drag.pc);
+  drag = null;
+  window.removeEventListener("pointermove", onPointerMove);
+  window.removeEventListener("pointerup", onPointerUp);
+}
+
+function normRot(r){ return ((r % 360) + 360) % 360; }
+
+function checkSnap(pc){
+  const dx = pc.x - pc.targetX, dy = pc.y - pc.targetY;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const rotOk = Math.abs(normRot(pc.rot) - normRot(pc.targetRot)) < 12;
+  const flipOk = pc.flip === pc.targetFlip;
+  if(dist < 16 && rotOk && flipOk){
+    pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
+    pc.solved = true;
+    pc.el.setAttribute("transform", transformStr(pc));
+    pc.el.style.cursor = "default";
+    solvedCount++;
+    updateStatus();
+  }
+}
+
+function selectPiece(id){
+  const pc = pieces.find(p=>p.id===id);
+  if(pc.solved) return;
+  selectedId = id;
+  drawPieces();
+}
+
+function updateStatus(){
+  const total = pieces.length;
+  statusEl.textContent = solvedCount >= total
+    ? "Solved! All nine pieces are in place."
+    : `${solvedCount} of ${total} pieces placed.`;
+}
+
+document.getElementById("rotateBtn").addEventListener("click", ()=>{
+  if(!selectedId) return;
+  const pc = pieces.find(p=>p.id===selectedId);
+  if(pc.solved) return;
+  pc.rot = normRot(pc.rot + 60);
+  pc.el.setAttribute("transform", transformStr(pc));
+});
+document.getElementById("flipBtn").addEventListener("click", ()=>{
+  if(!selectedId) return;
+  const pc = pieces.find(p=>p.id===selectedId);
+  if(pc.solved) return;
+  pc.flip = pc.flip * -1;
+  pc.el.setAttribute("transform", transformStr(pc));
+});
+document.getElementById("solutionBtn").addEventListener("click", ()=>{
+  pieces.forEach(pc=>{
+    pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
+    pc.solved = true;
+    pc.el.setAttribute("transform", transformStr(pc));
+    pc.el.style.cursor = "default";
+  });
+  solvedCount = pieces.length;
+  selectedId = null;
+  updateStatus();
+});
+document.getElementById("scrambleBtn").addEventListener("click", scramble);
+
+function scramble(){
+  const trayXs = [60,150,260,350,430, 90,200,310,410];
+  const trayYs = [520,540,510,540,520, 460,470,460,470];
+  pieces.forEach((pc,i)=>{
+    pc.x = trayXs[i % trayXs.length] + (Math.random()*20-10);
+    pc.y = trayYs[i % trayYs.length] + (Math.random()*20-10);
+    pc.rot = [60,120,180,240,300][Math.floor(Math.random()*5)];
+    pc.flip = 1;
+    pc.solved = false;
+  });
+  solvedCount = 0;
+  selectedId = null;
+  drawPieces();
+  updateStatus();
+}
+
+drawTargets();
+scramble();
+</script>
+</body>
+</html>
