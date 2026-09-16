@@ -16,16 +16,17 @@
   }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; background:var(--bg); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--text); }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
   p.sub { font-size: 14px; color: var(--text-secondary); margin: 0 0 16px; }
   .row { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
-  #status { font-size: 14px; color: var(--text-secondary); }
-  button { padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border-strong);
-           background: var(--card); color: var(--text); font-size: 14px; cursor: pointer; }
+  #status { font-size: 15px; color: var(--text-secondary); }
+  button { padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border-strong);
+           background: var(--card); color: var(--text); font-size: 15px; cursor: pointer; }
   button:active { transform: translateY(1px); }
   button.primary { border-color: var(--accent); color: var(--accent-text); }
-  #board { width:100%; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
+  #boardWrap { display:flex; justify-content:center; }
+  #board { width:100%; max-width: 760px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
   .btnbar { display:flex; gap:8px; flex-wrap:wrap; }
   .footer-row { display:flex; justify-content:space-between; margin-top: 12px; gap:8px; flex-wrap:wrap; }
 </style>
@@ -33,7 +34,7 @@
 <body>
 <div class="wrap">
   <h1>Triangle tangram puzzle</h1>
-  <p class="sub">Drag a piece to move it. Select it, then rotate or flip. Fit all 9 pieces into the outlines.</p>
+  <p class="sub">Click a piece to select it, then Rotate or Flip. Drag pieces into the dashed outlines.</p>
 
   <div class="row">
     <div id="status">0 of 9 pieces placed.</div>
@@ -43,11 +44,13 @@
     </div>
   </div>
 
-  <svg id="board" viewBox="0 0 500 620" role="img" aria-label="Puzzle board">
-    <title>Triangle puzzle board</title>
-    <g id="targetLayer"></g>
-    <g id="pieceLayer"></g>
-  </svg>
+  <div id="boardWrap">
+    <svg id="board" viewBox="0 0 500 620" role="img" aria-label="Puzzle board">
+      <title>Triangle puzzle board</title>
+      <g id="targetLayer"></g>
+      <g id="pieceLayer"></g>
+    </svg>
+  </div>
 
   <div class="footer-row">
     <button id="solutionBtn">&#128065; Show solution</button>
@@ -60,14 +63,13 @@ const PIECE_DATA = [[[90.0,77.94228634059947],[75.0,103.92304845413263],[45.0,10
 const BONUS_DATA = [[0,0],[30,0],[15,25.980762113533157]];
 
 const COLORS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD","#639922","#BA7517","#888780"];
-const DARK   = ["#26215C","#04342C","#4A1B0C","#4B1528","#042C53","#173404","#412402","#2C2C2A"];
-const BONUS_COLOR = "#D4534B", BONUS_DARK = "#501313";
+const BONUS_COLOR = "#D4534B";
 
 const SCALE = 2.0;
 const BOARD_OFFSET = {x:120, y:260};
 const BONUS_OFFSET = {x:60, y:60};
 
-function poly(pts){ return pts.map(p=>p.join(",")).join(" "); }
+function polyStr(pts){ return pts.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" "); }
 function centroid(pts){
   let a=0,cx=0,cy=0;
   for(let i=0;i<pts.length-1;i++){
@@ -83,20 +85,22 @@ function centroid(pts){
   return [cx/(6*a), cy/(6*a)];
 }
 
-function buildPiece(id, rawPts, color, dark, isBonus){
+function buildPiece(id, rawPts, color, isBonus){
   const scaled = rawPts.map(([x,y])=>[x*SCALE, y*SCALE]);
   const c = centroid(scaled.concat([scaled[0]]));
-  const local = scaled.map(([x,y])=>[x-c[0], y-c[1]]);
+  const localNormal = scaled.map(([x,y])=>[x-c[0], y-c[1]]);
+  const localFlipped = localNormal.map(([x,y])=>[-x, y]);
   const offset = isBonus ? BONUS_OFFSET : BOARD_OFFSET;
   const targetX = c[0] + offset.x, targetY = c[1] + offset.y;
-  return { id, local, color, dark, isBonus, targetX, targetY, targetRot:0, targetFlip:1,
-           x: targetX, y: targetY, rot: 0, flip: 1, solved:false };
+  return { id, localNormal, localFlipped, color, isBonus, targetX, targetY, targetRot:0, targetFlip:1,
+           x: targetX, y: targetY, rot: 0, flip: 1, solved:false, el:null, polyEl:null };
 }
 
-let pieces = PIECE_DATA.map((p,i)=>buildPiece("p"+(i+1), p, COLORS[i], DARK[i], false));
-pieces.push(buildPiece("bonus", BONUS_DATA, BONUS_COLOR, BONUS_DARK, true));
+let pieces = PIECE_DATA.map((p,i)=>buildPiece("p"+(i+1), p, COLORS[i], false));
+pieces.push(buildPiece("bonus", BONUS_DATA, BONUS_COLOR, true));
 
 const svgNS = "http://www.w3.org/2000/svg";
+const boardSvg = document.getElementById("board");
 const pieceLayer = document.getElementById("pieceLayer");
 const targetLayer = document.getElementById("targetLayer");
 const statusEl = document.getElementById("status");
@@ -104,10 +108,11 @@ let selectedId = null;
 let solvedCount = 0;
 
 function drawTargets(){
+  targetLayer.innerHTML = "";
   pieces.forEach(pc=>{
     const el = document.createElementNS(svgNS,"polygon");
-    const pts = pc.local.map(([x,y])=>[x+pc.targetX, y+pc.targetY]);
-    el.setAttribute("points", poly(pts));
+    const pts = pc.localNormal.map(([x,y])=>[x+pc.targetX, y+pc.targetY]);
+    el.setAttribute("points", polyStr(pts));
     el.setAttribute("fill", "none");
     el.setAttribute("stroke", "var(--border-strong)");
     el.setAttribute("stroke-width","1.5");
@@ -116,59 +121,77 @@ function drawTargets(){
   });
 }
 
-function transformStr(pc){
-  return `translate(${pc.x} ${pc.y}) rotate(${pc.rot}) scale(${pc.flip} 1)`;
+function pointsFor(pc){
+  return pc.flip === 1 ? pc.localNormal : pc.localFlipped;
+}
+function groupTransform(pc){
+  return `translate(${pc.x.toFixed(2)} ${pc.y.toFixed(2)}) rotate(${pc.rot})`;
 }
 
-function drawPieces(){
+// Build each piece's DOM ONCE. Selecting/rotating/flipping/dragging only
+// mutates existing elements' attributes -- never recreates the DOM. This is
+// what makes pointer capture (drag) and click-to-select reliable.
+function buildDom(){
   pieceLayer.innerHTML = "";
   pieces.forEach(pc=>{
     const g = document.createElementNS(svgNS,"g");
     g.setAttribute("data-id", pc.id);
-    g.setAttribute("transform", transformStr(pc));
+    g.setAttribute("transform", groupTransform(pc));
     g.style.cursor = "grab";
-    const p1 = document.createElementNS(svgNS,"polygon");
-    p1.setAttribute("points", poly(pc.local));
-    p1.setAttribute("fill", pc.color);
-    p1.setAttribute("stroke", pc.id===selectedId ? "#000000" : "#FFFFFF");
-    p1.setAttribute("stroke-width", pc.id===selectedId ? "3" : "1.5");
-    g.appendChild(p1);
+    const poly1 = document.createElementNS(svgNS,"polygon");
+    poly1.setAttribute("points", polyStr(pointsFor(pc)));
+    poly1.setAttribute("fill", pc.color);
+    poly1.setAttribute("stroke", "#FFFFFF");
+    poly1.setAttribute("stroke-width", "1.5");
+    g.appendChild(poly1);
     g.addEventListener("pointerdown", onPointerDown);
     pieceLayer.appendChild(g);
     pc.el = g;
+    pc.polyEl = poly1;
   });
+}
+
+function setSelected(id){
+  if(selectedId){
+    const prev = pieces.find(p=>p.id===selectedId);
+    if(prev){ prev.polyEl.setAttribute("stroke","#FFFFFF"); prev.polyEl.setAttribute("stroke-width","1.5"); }
+  }
+  selectedId = id;
+  if(id){
+    const pc = pieces.find(p=>p.id===id);
+    pc.polyEl.setAttribute("stroke","#000000");
+    pc.polyEl.setAttribute("stroke-width","3");
+  }
 }
 
 let drag = null;
 function onPointerDown(e){
   const id = e.currentTarget.getAttribute("data-id");
   const pc = pieces.find(p=>p.id===id);
-  if(pc.solved) { selectPiece(id); return; }
-  selectPiece(id);
-  const svg = document.getElementById("board");
-  const pt = clientToSvg(e.clientX, e.clientY, svg);
+  if(pc.solved){ setSelected(id); return; }
+  setSelected(id);
+  const pt = clientToSvg(e.clientX, e.clientY);
   drag = { pc, startX: pt.x, startY: pt.y, origX: pc.x, origY: pc.y };
-  e.currentTarget.setPointerCapture(e.pointerId);
-  e.currentTarget.style.cursor = "grabbing";
-  pieceLayer.appendChild(e.currentTarget);
+  pc.el.setPointerCapture(e.pointerId);
+  pc.el.style.cursor = "grabbing";
+  pieceLayer.appendChild(pc.el); // bring to front
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
 }
-function clientToSvg(clientX, clientY, svg){
-  const pt = svg.createSVGPoint();
+function clientToSvg(clientX, clientY){
+  const pt = boardSvg.createSVGPoint();
   pt.x = clientX; pt.y = clientY;
-  const ctm = svg.getScreenCTM().inverse();
+  const ctm = boardSvg.getScreenCTM().inverse();
   return pt.matrixTransform(ctm);
 }
 function onPointerMove(e){
   if(!drag) return;
-  const svg = document.getElementById("board");
-  const pt = clientToSvg(e.clientX, e.clientY, svg);
+  const pt = clientToSvg(e.clientX, e.clientY);
   drag.pc.x = drag.origX + (pt.x - drag.startX);
   drag.pc.y = drag.origY + (pt.y - drag.startY);
-  drag.pc.el.setAttribute("transform", transformStr(drag.pc));
+  drag.pc.el.setAttribute("transform", groupTransform(drag.pc));
 }
-function onPointerUp(e){
+function onPointerUp(){
   if(!drag) return;
   drag.pc.el.style.cursor = "grab";
   checkSnap(drag.pc);
@@ -184,21 +207,15 @@ function checkSnap(pc){
   const dist = Math.sqrt(dx*dx + dy*dy);
   const rotOk = Math.abs(normRot(pc.rot) - normRot(pc.targetRot)) < 12;
   const flipOk = pc.flip === pc.targetFlip;
-  if(dist < 16 && rotOk && flipOk){
+  if(dist < 18 && rotOk && flipOk){
     pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
     pc.solved = true;
-    pc.el.setAttribute("transform", transformStr(pc));
+    pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
+    pc.el.setAttribute("transform", groupTransform(pc));
     pc.el.style.cursor = "default";
     solvedCount++;
     updateStatus();
   }
-}
-
-function selectPiece(id){
-  const pc = pieces.find(p=>p.id===id);
-  if(pc.solved) return;
-  selectedId = id;
-  drawPieces();
 }
 
 function updateStatus(){
@@ -213,29 +230,31 @@ document.getElementById("rotateBtn").addEventListener("click", ()=>{
   const pc = pieces.find(p=>p.id===selectedId);
   if(pc.solved) return;
   pc.rot = normRot(pc.rot + 60);
-  pc.el.setAttribute("transform", transformStr(pc));
+  pc.el.setAttribute("transform", groupTransform(pc));
 });
 document.getElementById("flipBtn").addEventListener("click", ()=>{
   if(!selectedId) return;
   const pc = pieces.find(p=>p.id===selectedId);
   if(pc.solved) return;
   pc.flip = pc.flip * -1;
-  pc.el.setAttribute("transform", transformStr(pc));
+  pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
 });
 document.getElementById("solutionBtn").addEventListener("click", ()=>{
   pieces.forEach(pc=>{
     pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
     pc.solved = true;
-    pc.el.setAttribute("transform", transformStr(pc));
+    pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
+    pc.el.setAttribute("transform", groupTransform(pc));
     pc.el.style.cursor = "default";
   });
   solvedCount = pieces.length;
-  selectedId = null;
+  setSelected(null);
   updateStatus();
 });
 document.getElementById("scrambleBtn").addEventListener("click", scramble);
 
 function scramble(){
+  drag = null;
   const trayXs = [60,150,260,350,430, 90,200,310,410];
   const trayYs = [520,540,510,540,520, 460,470,460,470];
   pieces.forEach((pc,i)=>{
@@ -246,8 +265,8 @@ function scramble(){
     pc.solved = false;
   });
   solvedCount = 0;
-  selectedId = null;
-  drawPieces();
+  setSelected(null);
+  buildDom();
   updateStatus();
 }
 
