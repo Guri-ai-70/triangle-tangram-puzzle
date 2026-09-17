@@ -26,9 +26,9 @@
   button:active { transform: translateY(1px); }
   button.primary { border-color: var(--accent); color: var(--accent-text); }
   #boardWrap { display:flex; justify-content:center; }
-  #board { width:100%; max-width: 900px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
+  #board { width:100%; max-width: 900px; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
   .btnbar { display:flex; gap:8px; flex-wrap:wrap; }
-  .piece-g { transition: transform 1s cubic-bezier(.25,.9,.3,1.15); }
+  .piece-g { transition: transform 1s cubic-bezier(.25,.9,.3,1.15); touch-action: none; }
   #pieceLayer { transition: opacity 0.3s ease; }
   .piece-g.dragging { transition: none; }
 </style>
