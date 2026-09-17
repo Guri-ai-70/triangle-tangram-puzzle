@@ -26,128 +26,153 @@
   button:active { transform: translateY(1px); }
   button.primary { border-color: var(--accent); color: var(--accent-text); }
   #boardWrap { display:flex; justify-content:center; }
-  #board { width:100%; max-width: 860px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
+  #board { width:100%; max-width: 900px; touch-action:none; background:var(--card); border-radius: 16px; border:1px solid var(--border); }
   .btnbar { display:flex; gap:8px; flex-wrap:wrap; }
-  .footer-row { display:flex; justify-content:space-between; margin-top: 12px; gap:8px; flex-wrap:wrap; }
+  .piece-g { transition: transform 1s cubic-bezier(.25,.9,.3,1.15); }
+  #pieceLayer { transition: opacity 0.3s ease; }
+  .piece-g.dragging { transition: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Triangle tangram puzzle</h1>
-  <p class="sub">Click a piece to select it, then Rotate or Flip. Drag pieces into the dashed outlines.</p>
+  <p class="sub">Click Scramble to mix the 8 pieces (including the small bonus one), then drag them back — 7 into the big triangle, 1 into its own small socket.</p>
 
   <div class="row">
-    <div id="status">0 of 9 pieces placed.</div>
+    <div id="status">Solved. Click Scramble to play.</div>
     <div class="btnbar">
       <button id="rotateBtn" aria-label="Rotate selected piece">&#8635; Rotate</button>
       <button id="flipBtn" aria-label="Flip selected piece">&#8646; Flip</button>
+      <button id="scrambleBtn" class="primary">&#8635; Scramble</button>
+      <button id="newGameBtn">&#8635; New Game</button>
     </div>
   </div>
 
   <div id="boardWrap">
-    <svg id="board" viewBox="0 0 520 680" role="img" aria-label="Puzzle board">
+    <svg id="board" viewBox="0 0 500 900" role="img" aria-label="Puzzle board">
       <title>Triangle puzzle board</title>
+      <g id="coverLayer"></g>
       <g id="targetLayer"></g>
       <g id="pieceLayer"></g>
     </svg>
   </div>
-
-  <div class="footer-row">
-    <button id="solutionBtn">&#128065; Show solution</button>
-    <button id="scrambleBtn" class="primary">&#8635; Scramble</button>
-  </div>
 </div>
 
 <script>
-const PIECE_DATA = [[[90.0,77.94228634059947],[75.0,103.92304845413263],[45.0,103.92304845413263],[60.0,129.90381056766577],[90.0,129.90381056766577],[120.0,129.90381056766577],[105.0,103.92304845413263],[90.0,77.94228634059947]],[[30.0,77.94228634059947],[15.0,103.92304845413263],[0.0,129.90381056766577],[30.0,129.90381056766577],[60.0,129.90381056766577],[45.0,103.92304845413263],[30.0,77.94228634059947]],[[60.0,25.980762113533157],[45.0,51.96152422706631],[30.0,77.94228634059947],[45.0,103.92304845413263],[60.0,77.94228634059947],[75.0,51.96152422706631],[60.0,25.980762113533157]],[[60.0,77.94228634059947],[45.0,103.92304845413263],[75.0,103.92304845413263],[90.0,77.94228634059947],[75.0,51.96152422706631],[60.0,77.94228634059947]],[[75.0,51.96152422706631],[90.0,77.94228634059947],[120.0,77.94228634059947],[105.0,51.96152422706631],[90.0,25.980762113533157],[75.0,51.96152422706631]],[[90.0,77.94228634059947],[105.0,103.92304845413263],[135.0,103.92304845413263],[120.0,77.94228634059947],[90.0,77.94228634059947]],[[105.0,103.92304845413263],[120.0,129.90381056766577],[150.0,129.90381056766577],[135.0,103.92304845413263],[105.0,103.92304845413263]],[[60.0,25.980762113533157],[75.0,51.96152422706631],[90.0,25.980762113533157],[75.0,0.0],[60.0,25.980762113533157]]];
-const BONUS_DATA = [[0,0],[30,0],[15,25.980762113533157]];
+const WOOD_FILL = "#E4D2A8";
+const WOOD_STROKE = "#8B6F47";
+const PIECES = [
+  {"local":[[29.16,-108.49],[-58.31,30.91],[29.16,77.58]],"target":[198.92,148.49],"color":"#D4534B"},
+  {"local":[[-31.73,-68.84],[-77.04,3.41],[55.73,75.66],[55.73,-22.18]],"target":[172.34,248.24],"color":"#7F77DD"},
+  {"local":[[-29.15,-48.17],[-74.46,24.08],[103.61,24.08]],"target":[124.46,299.82],"color":"#1D9E75"},
+  {"local":[[-29.16,-108.49],[-29.16,77.58],[58.31,30.91]],"target":[257.23,148.49],"color":"#D85A30"},
+  {"local":[[-58.31,0.03],[29.15,-46.64],[29.15,46.61]],"target":[286.38,226.04],"color":"#639922"},
+  {"local":[[-39.18,-59.35],[-39.18,38.49],[48.29,38.49],[48.29,-12.77]],"target":[267.25,285.41],"color":"#BA7517"},
+  {"local":[[-30.2,-96.33],[-30.2,48.17],[60.41,48.17]],"target":[345.74,275.73],"color":"#378ADD"},
+  {"local":[[-30.0,-17.32],[30.0,-17.32],[0.0,34.64]],"target":[450.0,77.32],"color":"#D4534B","bonus":true}
+];
+const TRAY = [[90,370],[270,370],[450,370],[90,580],[270,580],[450,580],[90,790],[270,790]];
+const PIECE_NUMS = [1,2,3,4,5,6,7,8];
+const DARK_COLORS = ["#501313","#26215C","#04342C","#4A1B0C","#173404","#412402","#042C53","#501313"];
+const ROT_STEP = 15; // finer rotate increment than the 60deg minimum needed to solve
 
-const COLORS = ["#7F77DD","#1D9E75","#D85A30","#D4537E","#378ADD","#639922","#BA7517","#888780"];
-const BONUS_COLOR = "#D4534B";
-
-const SCALE = 1.7;
-const BOARD_OFFSET = {x:110, y:40};
-const BONUS_OFFSET = {x:400, y:60};
-
-function polyStr(pts){ return pts.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" "); }
-function centroid(pts){
-  let a=0,cx=0,cy=0;
-  for(let i=0;i<pts.length-1;i++){
-    const [x0,y0]=pts[i],[x1,y1]=pts[i+1];
-    const cross = x0*y1-x1*y0;
-    a += cross; cx += (x0+x1)*cross; cy += (y0+y1)*cross;
-  }
-  if(Math.abs(a) < 1e-6){
-    const n = pts.length;
-    return [pts.reduce((s,p)=>s+p[0],0)/n, pts.reduce((s,p)=>s+p[1],0)/n];
-  }
-  a*=0.5;
-  return [cx/(6*a), cy/(6*a)];
+function poly(pts){ return pts.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" "); }
+function buildPiece(def, i){
+  return { id:"p"+i, local:def.local, color:def.color, bonus: !!def.bonus,
+           targetX:def.target[0], targetY:def.target[1], targetRot:0, targetFlip:1,
+           x:def.target[0], y:def.target[1], rot:0, flip:1, solved:true, el:null, polyEl:null };
 }
-
-function buildPiece(id, rawPts, color, isBonus){
-  const scaled = rawPts.map(([x,y])=>[x*SCALE, y*SCALE]);
-  const c = centroid(scaled.concat([scaled[0]]));
-  const localNormal = scaled.map(([x,y])=>[x-c[0], y-c[1]]);
-  const localFlipped = localNormal.map(([x,y])=>[-x, y]);
-  const offset = isBonus ? BONUS_OFFSET : BOARD_OFFSET;
-  const targetX = c[0] + offset.x, targetY = c[1] + offset.y;
-  return { id, localNormal, localFlipped, color, isBonus, targetX, targetY, targetRot:0, targetFlip:1,
-           x: targetX, y: targetY, rot: 0, flip: 1, solved:false, el:null, polyEl:null };
-}
-
-let pieces = PIECE_DATA.map((p,i)=>buildPiece("p"+(i+1), p, COLORS[i], false));
-pieces.push(buildPiece("bonus", BONUS_DATA, BONUS_COLOR, true));
+let pieces = PIECES.map((d,i)=>buildPiece(d,i));
 
 const svgNS = "http://www.w3.org/2000/svg";
 const boardSvg = document.getElementById("board");
+const coverLayer = document.getElementById("coverLayer");
 const pieceLayer = document.getElementById("pieceLayer");
 const targetLayer = document.getElementById("targetLayer");
 const statusEl = document.getElementById("status");
 let selectedId = null;
-let solvedCount = 0;
+let solvedCount = pieces.length;
+let scrambled = false;
+
+function drawCover(){
+  coverLayer.innerHTML = "";
+  // outer solid triangle, wood-toned, as the "not yet played" look
+  const outer = document.createElementNS(svgNS,"polygon");
+  outer.setAttribute("points", "228.08,40 50,323.9 406.15,323.9");
+  outer.setAttribute("fill", WOOD_FILL);
+  outer.setAttribute("stroke", WOOD_STROKE);
+  outer.setAttribute("stroke-width","2");
+  coverLayer.appendChild(outer);
+  // faint seam lines matching the 7-piece cut lines
+  pieces.filter(pc=>!pc.bonus).forEach(pc=>{
+    const el = document.createElementNS(svgNS,"polygon");
+    const pts = pc.local.map(([x,y])=>[x+pc.targetX, y+pc.targetY]);
+    el.setAttribute("points", poly(pts));
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke", WOOD_STROKE);
+    el.setAttribute("stroke-width","1");
+    el.setAttribute("opacity","0.6");
+    coverLayer.appendChild(el);
+  });
+  // bonus piece sitting in its own small socket
+  const bonusPc = pieces.find(pc=>pc.bonus);
+  const bpts = bonusPc.local.map(([x,y])=>[x+bonusPc.targetX, y+bonusPc.targetY]);
+  const bonusEl = document.createElementNS(svgNS,"polygon");
+  bonusEl.setAttribute("points", poly(bpts));
+  bonusEl.setAttribute("fill", WOOD_FILL);
+  bonusEl.setAttribute("stroke", WOOD_STROKE);
+  bonusEl.setAttribute("stroke-width","1.5");
+  coverLayer.appendChild(bonusEl);
+}
 
 function drawTargets(){
   targetLayer.innerHTML = "";
-  pieces.forEach(pc=>{
-    const el = document.createElementNS(svgNS,"polygon");
-    const pts = pc.localNormal.map(([x,y])=>[x+pc.targetX, y+pc.targetY]);
-    el.setAttribute("points", polyStr(pts));
-    el.setAttribute("fill", "none");
-    el.setAttribute("stroke", "var(--border-strong)");
-    el.setAttribute("stroke-width","1.5");
-    el.setAttribute("stroke-dasharray","4,3");
-    targetLayer.appendChild(el);
-  });
+  // just the outer socket outlines (no internal per-piece hints)
+  const mainOutline = document.createElementNS(svgNS,"polygon");
+  mainOutline.setAttribute("points", "228.08,40 50,323.9 406.15,323.9");
+  mainOutline.setAttribute("fill", "none");
+  mainOutline.setAttribute("stroke", "var(--border-strong)");
+  mainOutline.setAttribute("stroke-width","1.5");
+  mainOutline.setAttribute("stroke-dasharray","4,3");
+  mainOutline.setAttribute("opacity", scrambled ? "1" : "0");
+  targetLayer.appendChild(mainOutline);
+
+  const bonusPc = pieces.find(pc=>pc.bonus);
+  const bpts = bonusPc.local.map(([x,y])=>[x+bonusPc.targetX, y+bonusPc.targetY]);
+  const bonusOutline = document.createElementNS(svgNS,"polygon");
+  bonusOutline.setAttribute("points", poly(bpts));
+  bonusOutline.setAttribute("fill", "none");
+  bonusOutline.setAttribute("stroke", "var(--border-strong)");
+  bonusOutline.setAttribute("stroke-width","1.5");
+  bonusOutline.setAttribute("stroke-dasharray","4,3");
+  bonusOutline.setAttribute("opacity", scrambled ? "1" : "0");
+  targetLayer.appendChild(bonusOutline);
 }
 
-function pointsFor(pc){
-  return pc.flip === 1 ? pc.localNormal : pc.localFlipped;
-}
-function groupTransform(pc){
-  return `translate(${pc.x.toFixed(2)} ${pc.y.toFixed(2)}) rotate(${pc.rot})`;
+function transformStr(pc){
+  return `translate(${pc.x.toFixed(2)}px, ${pc.y.toFixed(2)}px) rotate(${pc.rot}deg) scale(${pc.flip},1)`;
 }
 
-// Build each piece's DOM ONCE. Selecting/rotating/flipping/dragging only
-// mutates existing elements' attributes -- never recreates the DOM. This is
-// what makes pointer capture (drag) and click-to-select reliable.
 function buildDom(){
   pieceLayer.innerHTML = "";
   pieces.forEach(pc=>{
     const g = document.createElementNS(svgNS,"g");
+    g.setAttribute("class","piece-g");
     g.setAttribute("data-id", pc.id);
-    g.setAttribute("transform", groupTransform(pc));
+    g.style.transformBox = "view-box";
+    g.style.transformOrigin = "0px 0px";
+    g.style.transform = transformStr(pc);
     g.style.cursor = "grab";
-    const poly1 = document.createElementNS(svgNS,"polygon");
-    poly1.setAttribute("points", polyStr(pointsFor(pc)));
-    poly1.setAttribute("fill", pc.color);
-    poly1.setAttribute("stroke", "#FFFFFF");
-    poly1.setAttribute("stroke-width", "1.5");
-    g.appendChild(poly1);
+    const p1 = document.createElementNS(svgNS,"polygon");
+    p1.setAttribute("points", poly(pc.local));
+    p1.setAttribute("fill", pc.color);
+    p1.setAttribute("stroke", "#FFFFFF");
+    p1.setAttribute("stroke-width", "1.5");
+    g.appendChild(p1);
     g.addEventListener("pointerdown", onPointerDown);
     pieceLayer.appendChild(g);
     pc.el = g;
-    pc.polyEl = poly1;
+    pc.polyEl = p1;
   });
 }
 
@@ -172,9 +197,10 @@ function onPointerDown(e){
   setSelected(id);
   const pt = clientToSvg(e.clientX, e.clientY);
   drag = { pc, startX: pt.x, startY: pt.y, origX: pc.x, origY: pc.y };
+  pc.el.classList.add("dragging");
   pc.el.setPointerCapture(e.pointerId);
   pc.el.style.cursor = "grabbing";
-  pieceLayer.appendChild(pc.el); // bring to front
+  pieceLayer.appendChild(pc.el);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
 }
@@ -189,10 +215,11 @@ function onPointerMove(e){
   const pt = clientToSvg(e.clientX, e.clientY);
   drag.pc.x = drag.origX + (pt.x - drag.startX);
   drag.pc.y = drag.origY + (pt.y - drag.startY);
-  drag.pc.el.setAttribute("transform", groupTransform(drag.pc));
+  drag.pc.el.style.transform = transformStr(drag.pc);
 }
 function onPointerUp(){
   if(!drag) return;
+  drag.pc.el.classList.remove("dragging");
   drag.pc.el.style.cursor = "grab";
   checkSnap(drag.pc);
   drag = null;
@@ -210,8 +237,7 @@ function checkSnap(pc){
   if(dist < 18 && rotOk && flipOk){
     pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
     pc.solved = true;
-    pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
-    pc.el.setAttribute("transform", groupTransform(pc));
+    pc.el.style.transform = transformStr(pc);
     pc.el.style.cursor = "default";
     solvedCount++;
     updateStatus();
@@ -221,7 +247,7 @@ function checkSnap(pc){
 function updateStatus(){
   const total = pieces.length;
   statusEl.textContent = solvedCount >= total
-    ? "Solved! All nine pieces are in place."
+    ? "Solved! All 8 pieces are in place."
     : `${solvedCount} of ${total} pieces placed.`;
 }
 
@@ -229,53 +255,77 @@ document.getElementById("rotateBtn").addEventListener("click", ()=>{
   if(!selectedId) return;
   const pc = pieces.find(p=>p.id===selectedId);
   if(pc.solved) return;
-  pc.rot = normRot(pc.rot + 60);
-  pc.el.setAttribute("transform", groupTransform(pc));
+  pc.rot = normRot(pc.rot + ROT_STEP);
+  pc.el.style.transform = transformStr(pc);
 });
 document.getElementById("flipBtn").addEventListener("click", ()=>{
   if(!selectedId) return;
   const pc = pieces.find(p=>p.id===selectedId);
   if(pc.solved) return;
   pc.flip = pc.flip * -1;
-  pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
-});
-document.getElementById("solutionBtn").addEventListener("click", ()=>{
-  pieces.forEach(pc=>{
-    pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
-    pc.solved = true;
-    pc.polyEl.setAttribute("points", polyStr(pointsFor(pc)));
-    pc.el.setAttribute("transform", groupTransform(pc));
-    pc.el.style.cursor = "default";
-  });
-  solvedCount = pieces.length;
-  setSelected(null);
-  updateStatus();
+  pc.el.style.transform = transformStr(pc);
 });
 document.getElementById("scrambleBtn").addEventListener("click", scramble);
 
 function scramble(){
+  if(!scrambled){
+    coverLayer.style.opacity = "0";
+    coverLayer.style.pointerEvents = "none";
+    pieceLayer.style.display = "";
+    pieceLayer.style.opacity = "0";
+    // force layout so the browser registers the "before" transform frame
+    // before we change it, otherwise the first move never transitions
+    void pieceLayer.getBoundingClientRect();
+    pieceLayer.style.opacity = "1";
+  }
   drag = null;
-  // 3x3 tray grid, well below the target triangle (y 40-261) and bonus
-  // target (y 50-94) so nothing spawns overlapping the solution outlines.
-  const cols = [80, 260, 440];
-  const rows = [320, 470, 620];
-  const trayXs = [cols[0],cols[1],cols[2],cols[0],cols[1],cols[2],cols[0],cols[1],cols[2]];
-  const trayYs = [rows[0],rows[0],rows[0],rows[1],rows[1],rows[1],rows[2],rows[2],rows[2]];
-  pieces.forEach((pc,i)=>{
-    pc.x = trayXs[i] + (Math.random()*16-8);
-    pc.y = trayYs[i] + (Math.random()*16-8);
-    pc.rot = [60,120,180,240,300][Math.floor(Math.random()*5)];
-    pc.flip = 1;
-    pc.solved = false;
+  scrambled = true;
+  drawTargets();
+  const shuffledTray = TRAY.slice().sort(()=>Math.random()-0.5);
+  // sweep left to right: order pieces by current x position before staggering
+  const order = pieces.slice().sort((a,b)=>a.x-b.x);
+  order.forEach((pc,i)=>{
+    const t = shuffledTray[i];
+    const newX = t[0] + (Math.random()*14-7);
+    const newY = t[1] + (Math.random()*14-7);
+    const newRot = Math.round((Math.random()*24))*ROT_STEP;
+    setTimeout(()=>{
+      pc.x = newX; pc.y = newY; pc.rot = newRot; pc.flip = 1; pc.solved = false;
+      pc.el.style.transform = transformStr(pc);
+      pc.el.style.cursor = "grab";
+    }, 60 + i*200);
   });
   solvedCount = 0;
   setSelected(null);
-  buildDom();
   updateStatus();
 }
 
+function newGame(){
+  drag = null;
+  scrambled = false;
+  selectedId = null;
+  pieces.forEach(pc=>{
+    pc.x = pc.targetX; pc.y = pc.targetY; pc.rot = pc.targetRot; pc.flip = pc.targetFlip;
+    pc.solved = true;
+    pc.el.style.transform = transformStr(pc);
+    pc.el.style.cursor = "grab";
+  });
+  solvedCount = pieces.length;
+  drawTargets();
+  pieceLayer.style.opacity = "0";
+  coverLayer.style.pointerEvents = "";
+  setTimeout(()=>{
+    pieceLayer.style.display = "none";
+    coverLayer.style.opacity = "1";
+  }, 320);
+  updateStatus();
+}
+document.getElementById("newGameBtn").addEventListener("click", newGame);
+
+buildDom();
+drawCover();
 drawTargets();
-scramble();
+pieceLayer.style.display = "none";
 </script>
 </body>
 </html>
